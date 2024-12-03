@@ -14,11 +14,17 @@ fn main() {
 
         let input_trimmed = input.trim();
 
-        match input_trimmed {
-            "exit 0" => process::exit(0),
+        let (command, arguments) = match input_trimmed.split_once(' ') {
+            Some((command, args)) => (command, args),
+            None => (input_trimmed, ""),
+        };
+
+        match command {
+            "exit" if arguments == "0" => process::exit(0),
+            "echo" => println!("{}", arguments),
             _ => {
                 // Invalid command
-                println!("{}: command not found", input_trimmed);
+                println!("{}: command not found", command);
                 io::stdout().flush().unwrap();
             }
         }
