@@ -11,5 +11,5 @@ fn main() {
     stdin.read_line(&mut input).unwrap();
 
     // Invalid command
-    print!("{}: command not found", input);
+    print!("{}: command not found", input.trim());
 }
