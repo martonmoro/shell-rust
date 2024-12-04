@@ -2,7 +2,7 @@
 use std::io::{self, Write};
 use std::{
     env,
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::{self, Command},
 };
 
@@ -20,7 +20,7 @@ fn find_exec(name: &str) -> Option<PathBuf> {
 
 fn main() {
     loop {
-        let builtins = ["exit", "echo", "type", "pwd"];
+        let builtins = ["exit", "echo", "type", "pwd", "cd"];
 
         print!("$ ");
         io::stdout().flush().unwrap();
@@ -65,6 +65,15 @@ fn main() {
                     }
                     Err(e) => eprintln!("error getting working directory: {e}"),
                 },
+                "cd" => {
+                    if args.len() != 1 {
+                        println!("type: expected 1 argument, got {}", args.len());
+                    }
+                    match std::env::set_current_dir(Path::new(args[0])) {
+                        Ok(_) => (),
+                        Err(_) => eprintln!("cd: {}: No such file or directory", args[0]),
+                    }
+                }
                 _ => unreachable!(),
             }
         } else if let Some(path) = find_exec(cmd) {
