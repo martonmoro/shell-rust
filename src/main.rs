@@ -20,7 +20,7 @@ fn find_exec(name: &str) -> Option<PathBuf> {
 
 fn main() {
     loop {
-        let builtins = ["exit", "echo", "type"];
+        let builtins = ["exit", "echo", "type", "pwd"];
 
         print!("$ ");
         io::stdout().flush().unwrap();
@@ -59,6 +59,12 @@ fn main() {
                         }
                     }
                 }
+                "pwd" => match env::current_dir() {
+                    Ok(curr_dir) => {
+                        println!("{}", curr_dir.display())
+                    }
+                    Err(e) => eprintln!("error getting working directory: {e}"),
+                },
                 _ => unreachable!(),
             }
         } else if let Some(path) = find_exec(cmd) {
