@@ -5,11 +5,6 @@ use std::{env, fs, process};
 fn main() {
     let path = env::var("PATH").unwrap();
     loop {
-        // let mut builtins = HashSet::new();
-        // builtins.insert("exit");
-        // builtins.insert("echo");
-        // builtins.insert("type");
-
         let builtins = ["exit", "echo", "type"];
 
         print!("$ ");
@@ -35,7 +30,9 @@ fn main() {
                 if builtins.contains(&cmd) {
                     println!("{} is a shell builtin", cmd);
                 } else {
+                    // split path
                     let split = &mut path.split(":");
+                    // check if it can find file in path
                     if let Some(path) =
                         split.find(|path| fs::metadata(format!("{}/{}", path, cmd)).is_ok())
                     {
