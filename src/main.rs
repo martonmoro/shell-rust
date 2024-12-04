@@ -1,9 +1,24 @@
 #[allow(unused_imports)]
 use std::io::{self, Write};
-use std::{env, fs, process};
+use std::{
+    env,
+    path::PathBuf,
+    process::{self, Command},
+};
+
+fn find_exec(name: &str) -> Option<PathBuf> {
+    if let Ok(paths) = env::var("PATH") {
+        for path in env::split_paths(&paths) {
+            let exec_path = path.join(name);
+            if exec_path.is_file() {
+                return Some(exec_path);
+            }
+        }
+    }
+    None
+}
 
 fn main() {
-    let path = env::var("PATH").unwrap();
     loop {
         let builtins = ["exit", "echo", "type"];
 
@@ -18,35 +33,43 @@ fn main() {
         let input_trimmed = input.trim();
 
         let argv = input_trimmed.split_whitespace().collect::<Vec<&str>>();
-
-        match argv[0] {
-            "exit" => process::exit(0),
-            "echo" => println!("{}", argv[1..].join(" ")),
-            "type" => {
-                if argv.len() != 2 {
-                    println!("type: expected 1 argument, got {}", argv.len() - 1);
-                }
-                let cmd = argv[1];
-                if builtins.contains(&cmd) {
-                    println!("{} is a shell builtin", cmd);
-                } else {
-                    // split path
-                    let split = &mut path.split(":");
-                    // check if it can find file in path
-                    if let Some(path) =
-                        split.find(|path| fs::metadata(format!("{}/{}", path, cmd)).is_ok())
-                    {
-                        println!("{cmd} is {path}/{cmd}")
+        let cmd = argv[0];
+        let args = &argv[1..];
+        if builtins.contains(&cmd) {
+            match cmd {
+                "exit" => process::exit(0),
+                "echo" => println!("{}", args.join(" ")),
+                "type" => {
+                    if args.len() != 1 {
+                        println!("type: expected 1 argument, got {}", args.len());
+                    }
+                    let type_cmd = args[0];
+                    if builtins.contains(&type_cmd) {
+                        println!("{} is a shell builtin", type_cmd);
                     } else {
-                        println!("{}: not found", cmd)
+                        match find_exec(type_cmd) {
+                            Some(exec_path) => {
+                                if let Some(path_str) = exec_path.to_str() {
+                                    println!("{} is {}", type_cmd, path_str);
+                                } else {
+                                    println!("Error: Path contains invalid Unicode");
+                                }
+                            }
+                            None => println!("{}: not found", type_cmd),
+                        }
                     }
                 }
+                _ => unreachable!(),
             }
-            _ => {
-                // Invalid command
-                println!("{}: command not found", input_trimmed);
-                io::stdout().flush().unwrap();
-            }
+        } else if let Some(path) = find_exec(cmd) {
+            Command::new(path)
+                .args(args)
+                .status() // the new process inherits the terminal's streams
+                .expect("failed to execute");
+        } else {
+            // Invalid command
+            println!("{}: command not found", input_trimmed);
+            io::stdout().flush().unwrap();
         }
     }
 }
