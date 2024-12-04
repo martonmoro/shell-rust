@@ -69,9 +69,14 @@ fn main() {
                     if args.len() != 1 {
                         println!("type: expected 1 argument, got {}", args.len());
                     }
-                    match std::env::set_current_dir(Path::new(args[0])) {
+                    let mut path = args[0].to_string();
+                    if args[0].starts_with("~") {
+                        let home = env::var("HOME").unwrap();
+                        path = path.replace("~", &home);
+                    }
+                    match std::env::set_current_dir(Path::new(&path)) {
                         Ok(_) => (),
-                        Err(_) => eprintln!("cd: {}: No such file or directory", args[0]),
+                        Err(_) => eprintln!("cd: {}: No such file or directory", path),
                     }
                 }
                 _ => unreachable!(),
