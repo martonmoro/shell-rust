@@ -18,83 +18,62 @@ fn find_exec(name: &str) -> Option<PathBuf> {
     None
 }
 
-fn split_with_quotes(input: &str) -> Vec<&str> {
+fn split_with_quotes(input: &str) -> Vec<String> {
     let mut result = Vec::new();
-    let mut start = 0;
+    let mut current_word = String::new();
+    let mut chars = input.chars().peekable();
     let mut in_single_quotes = false;
     let mut in_double_quotes = false;
-    let mut chars: Vec<char> = input.chars().collect();
 
-    for i in 0..chars.len() {
-        match chars[i] {
-            '\'' if !in_double_quotes => {
-                // Handle single quotes (only if not in double quotes)
-                if !in_single_quotes {
-                    // Starting single quote
-                    if start < i {
-                        for word in input[start..i].split_whitespace() {
-                            result.push(word);
+    while let Some(c) = chars.next() {
+        match c {
+            // Handle backslashes
+            '\\' => {
+                if let Some(&next_char) = chars.peek() {
+                    // In double quotes, only certain characters are escaped
+                    if in_double_quotes {
+                        match next_char {
+                            '\\' | '$' | '"' | '\n' => {
+                                chars.next(); // Consume the escaped character
+                                current_word.push(next_char);
+                            }
+                            _ => {
+                                current_word.push('\\');
+                                current_word.push(next_char);
+                                chars.next();
+                            }
                         }
+                    } else {
+                        // Outside quotes, preserve the literal value of the next character
+                        chars.next(); // Consume the escaped character
+                        current_word.push(next_char);
                     }
-                    start = i + 1;
-                    in_single_quotes = true;
-                } else {
-                    // Ending single quote
-                    result.push(&input[start..i]);
-                    start = i + 1;
-                    in_single_quotes = false;
                 }
+            }
+            // Handle quotes
+            '\'' if !in_double_quotes => {
+                in_single_quotes = !in_single_quotes;
             }
             '"' if !in_single_quotes => {
-                // Handle double quotes (only if not in single quotes)
-                if !in_double_quotes {
-                    // Starting double quote
-                    if start < i {
-                        for word in input[start..i].split_whitespace() {
-                            result.push(word);
-                        }
-                    }
-                    start = i + 1;
-                    in_double_quotes = true;
-                } else {
-                    // Ending double quote
-                    result.push(&input[start..i]);
-                    start = i + 1;
-                    in_double_quotes = false;
-                }
+                in_double_quotes = !in_double_quotes;
             }
-            '\\' if in_double_quotes && i + 1 < chars.len() => {
-                // Handle escape sequences in double quotes
-                match chars[i + 1] {
-                    '\\' | '$' | '"' | '\n' => {
-                        // Skip the next character as it's escaped
-                        chars.remove(i);
-                    }
-                    _ => {} // Keep backslash for other characters
-                }
-            }
+            // Handle spaces
             ' ' if !in_single_quotes && !in_double_quotes => {
-                // Handle spaces outside of quotes
-                if start < i {
-                    for word in input[start..i].split_whitespace() {
-                        result.push(word);
-                    }
+                if !current_word.is_empty() {
+                    result.push(current_word);
+                    current_word = String::new();
                 }
-                start = i + 1;
             }
-            _ => {}
+            // Handle all other characters
+            _ => {
+                current_word.push(c);
+            }
         }
     }
 
-    // Handle remaining content
-    if start < input.len() {
-        if in_single_quotes || in_double_quotes {
-            result.push(&input[start..]);
-        } else {
-            for word in input[start..].split_whitespace() {
-                result.push(word);
-            }
-        }
+    // Add the last word if there is one
+    if !current_word.is_empty() {
+        result.push(current_word);
     }
 
     result
@@ -113,20 +92,29 @@ fn main() {
         stdin.read_line(&mut input).unwrap();
 
         let input_trimmed = input.trim();
+        if input_trimmed.is_empty() {
+            continue;
+        }
 
         let argv = split_with_quotes(input_trimmed);
-        let cmd = argv[0];
+        if argv.is_empty() {
+            continue;
+        }
+
+        let cmd = &argv[0];
         let args = &argv[1..];
-        if builtins.contains(&cmd) {
-            match cmd {
+
+        if builtins.contains(&cmd.as_str()) {
+            match cmd.as_str() {
                 "exit" => process::exit(0),
                 "echo" => println!("{}", args.join(" ")),
                 "type" => {
                     if args.len() != 1 {
                         println!("type: expected 1 argument, got {}", args.len());
+                        continue;
                     }
-                    let type_cmd = args[0];
-                    if builtins.contains(&type_cmd) {
+                    let type_cmd = &args[0];
+                    if builtins.contains(&type_cmd.as_str()) {
                         println!("{} is a shell builtin", type_cmd);
                     } else {
                         match find_exec(type_cmd) {
@@ -142,23 +130,22 @@ fn main() {
                     }
                 }
                 "pwd" => match env::current_dir() {
-                    Ok(curr_dir) => {
-                        println!("{}", curr_dir.display())
-                    }
+                    Ok(curr_dir) => println!("{}", curr_dir.display()),
                     Err(e) => eprintln!("error getting working directory: {e}"),
                 },
                 "cd" => {
                     if args.len() != 1 {
-                        println!("type: expected 1 argument, got {}", args.len());
+                        println!("cd: expected 1 argument, got {}", args.len());
+                        continue;
                     }
                     let mut path = args[0].to_string();
-                    if args[0].starts_with("~") {
-                        let home = env::var("HOME").unwrap();
-                        path = path.replace("~", &home);
+                    if path.starts_with('~') {
+                        if let Ok(home) = env::var("HOME") {
+                            path = path.replace('~', &home);
+                        }
                     }
-                    match std::env::set_current_dir(Path::new(&path)) {
-                        Ok(_) => (),
-                        Err(_) => eprintln!("cd: {}: No such file or directory", path),
+                    if let Err(_) = std::env::set_current_dir(Path::new(&path)) {
+                        eprintln!("cd: {}: No such file or directory", path);
                     }
                 }
                 _ => unreachable!(),
@@ -166,11 +153,10 @@ fn main() {
         } else if let Some(path) = find_exec(cmd) {
             Command::new(path)
                 .args(args)
-                .status() // the new process inherits the terminal's streams
+                .status()
                 .expect("failed to execute");
         } else {
-            // Invalid command
-            println!("{}: command not found", input_trimmed);
+            println!("{}: command not found", cmd);
             io::stdout().flush().unwrap();
         }
     }
