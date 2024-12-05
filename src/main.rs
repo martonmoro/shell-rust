@@ -18,6 +18,88 @@ fn find_exec(name: &str) -> Option<PathBuf> {
     None
 }
 
+fn split_with_quotes(input: &str) -> Vec<&str> {
+    let mut result = Vec::new();
+    let mut start = 0;
+    let mut in_single_quotes = false;
+    let mut in_double_quotes = false;
+    let mut chars: Vec<char> = input.chars().collect();
+
+    for i in 0..chars.len() {
+        match chars[i] {
+            '\'' if !in_double_quotes => {
+                // Handle single quotes (only if not in double quotes)
+                if !in_single_quotes {
+                    // Starting single quote
+                    if start < i {
+                        for word in input[start..i].split_whitespace() {
+                            result.push(word);
+                        }
+                    }
+                    start = i + 1;
+                    in_single_quotes = true;
+                } else {
+                    // Ending single quote
+                    result.push(&input[start..i]);
+                    start = i + 1;
+                    in_single_quotes = false;
+                }
+            }
+            '"' if !in_single_quotes => {
+                // Handle double quotes (only if not in single quotes)
+                if !in_double_quotes {
+                    // Starting double quote
+                    if start < i {
+                        for word in input[start..i].split_whitespace() {
+                            result.push(word);
+                        }
+                    }
+                    start = i + 1;
+                    in_double_quotes = true;
+                } else {
+                    // Ending double quote
+                    result.push(&input[start..i]);
+                    start = i + 1;
+                    in_double_quotes = false;
+                }
+            }
+            '\\' if in_double_quotes && i + 1 < chars.len() => {
+                // Handle escape sequences in double quotes
+                match chars[i + 1] {
+                    '\\' | '$' | '"' | '\n' => {
+                        // Skip the next character as it's escaped
+                        chars.remove(i);
+                    }
+                    _ => {} // Keep backslash for other characters
+                }
+            }
+            ' ' if !in_single_quotes && !in_double_quotes => {
+                // Handle spaces outside of quotes
+                if start < i {
+                    for word in input[start..i].split_whitespace() {
+                        result.push(word);
+                    }
+                }
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+
+    // Handle remaining content
+    if start < input.len() {
+        if in_single_quotes || in_double_quotes {
+            result.push(&input[start..]);
+        } else {
+            for word in input[start..].split_whitespace() {
+                result.push(word);
+            }
+        }
+    }
+
+    result
+}
+
 fn main() {
     loop {
         let builtins = ["exit", "echo", "type", "pwd", "cd"];
@@ -32,7 +114,7 @@ fn main() {
 
         let input_trimmed = input.trim();
 
-        let argv = input_trimmed.split_whitespace().collect::<Vec<&str>>();
+        let argv = split_with_quotes(input_trimmed);
         let cmd = argv[0];
         let args = &argv[1..];
         if builtins.contains(&cmd) {
