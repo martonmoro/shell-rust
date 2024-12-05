@@ -43,6 +43,10 @@ fn split_with_quotes(input: &str) -> Vec<String> {
                                 chars.next();
                             }
                         }
+                    } else if in_single_quotes {
+                        current_word.push('\\');
+                        current_word.push(next_char);
+                        chars.next();
                     } else {
                         // Outside quotes, preserve the literal value of the next character
                         chars.next(); // Consume the escaped character
